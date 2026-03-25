@@ -7,6 +7,8 @@ export interface IpcApi {
   searchProducts: (term: string) => Promise<PosProduct[]>
   getProductByBarcode: (barcode: string) => Promise<PosProduct | null>
   checkout: (payload: CheckoutPayload) => Promise<CheckoutResult>
+  getSalesHistory: (input: GetSalesHistoryInput) => Promise<SaleHistoryItem[]>
+  getSaleById: (saleId: string) => Promise<SaleDetail | null>
 }
 
 export interface AppInfo {
@@ -119,6 +121,42 @@ export interface CheckoutError {
 }
 
 export type CheckoutResult = CheckoutSuccess | CheckoutError
+
+export interface GetSalesHistoryInput {
+  limit?: number
+  saleNumber?: number | null
+}
+
+export interface SaleHistoryItem {
+  id: string
+  saleNumber: number
+  cashierName: string
+  paymentMethod: PaymentMethod
+  totalAmount: number
+  itemCount: number
+  createdAt: string
+}
+
+export interface SaleLineItem {
+  productName: string
+  sku: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
+}
+
+export interface SaleDetail {
+  id: string
+  saleNumber: number
+  cashierName: string
+  paymentMethod: PaymentMethod
+  subtotal: number
+  totalAmount: number
+  amountTendered: number | null
+  changeGiven: number
+  createdAt: string
+  items: SaleLineItem[]
+}
 
 export type PageId =
   | 'pos'

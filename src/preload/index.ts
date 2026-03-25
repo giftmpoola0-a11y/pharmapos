@@ -17,6 +17,10 @@ const api: IpcApi = {
   getProductByBarcode: (barcode) => ipcRenderer.invoke('pos:get-product-by-barcode', barcode),
 
   checkout: (payload) => ipcRenderer.invoke('pos:checkout', payload),
+
+  getSalesHistory: (input) => ipcRenderer.invoke('sales:get-history', input),
+
+  getSaleById: (saleId) => ipcRenderer.invoke('sales:get-by-id', saleId),
 }
 
 contextBridge.exposeInMainWorld('api', api)

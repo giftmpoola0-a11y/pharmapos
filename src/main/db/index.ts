@@ -14,6 +14,10 @@ import type {
   CheckoutPayload,
   CheckoutResult,
   CheckoutFailedItem,
+  GetSalesHistoryInput,
+  SaleHistoryItem,
+  SaleDetail,
+  SaleLineItem,
 } from '../../shared/types'
 
 let db: Database.Database | null = null
@@ -566,4 +570,97 @@ export function processCheckout(payload: CheckoutPayload): CheckoutResult {
       failedItems: [],
     }
   }
+}
+
+// ─── Sales History ───
+
+export function getSalesHistory(input: GetSalesHistoryInput): SaleHistoryItem[] {
+  const database = getDb()
+  const limit = input.limit ?? 50
+
+  if (input.saleNumber != null) {
+    const row = database
+      .prepare(
+        `
+        SELECT
+          s.id,
+          s.sale_number   AS saleNumber,
+          u.full_name     AS cashierName,
+          s.payment_method AS paymentMethod,
+          s.total          AS totalAmount,
+          (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS itemCount,
+          s.created_at     AS createdAt
+        FROM sales s
+        JOIN users u ON u.id = s.cashier_id
+        WHERE s.sale_number = ?
+        LIMIT 1
+        `
+      )
+      .get(input.saleNumber) as SaleHistoryItem | undefined
+
+    return row ? [row] : []
+  }
+
+  return database
+    .prepare(
+      `
+      SELECT
+        s.id,
+        s.sale_number   AS saleNumber,
+        u.full_name     AS cashierName,
+        s.payment_method AS paymentMethod,
+        s.total          AS totalAmount,
+        (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS itemCount,
+        s.created_at     AS createdAt
+      FROM sales s
+      JOIN users u ON u.id = s.cashier_id
+      ORDER BY s.created_at DESC
+      LIMIT ?
+      `
+    )
+    .all(limit) as SaleHistoryItem[]
+}
+
+export function getSaleById(saleId: string): SaleDetail | null {
+  const database = getDb()
+
+  const sale = database
+    .prepare(
+      `
+      SELECT
+        s.id,
+        s.sale_number    AS saleNumber,
+        u.full_name      AS cashierName,
+        s.payment_method AS paymentMethod,
+        s.subtotal,
+        s.total           AS totalAmount,
+        s.amount_tendered AS amountTendered,
+        s.change_given    AS changeGiven,
+        s.created_at      AS createdAt
+      FROM sales s
+      JOIN users u ON u.id = s.cashier_id
+      WHERE s.id = ?
+      `
+    )
+    .get(saleId) as Omit<SaleDetail, 'items'> | undefined
+
+  if (!sale) return null
+
+  const items = database
+    .prepare(
+      `
+      SELECT
+        si.product_name AS productName,
+        si.product_sku  AS sku,
+        si.quantity,
+        si.unit_price   AS unitPrice,
+        si.line_total   AS lineTotal
+      FROM sale_items si
+      WHERE si.sale_id = ?
+      ORDER BY si.rowid
+      `
+    )
+    .all(saleId) as SaleLineItem[]
+
+  return { ...sale, items }
 }

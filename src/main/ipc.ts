@@ -6,6 +6,8 @@ import {
   searchProducts,
   getProductByBarcode,
   processCheckout,
+  getSalesHistory,
+  getSaleById,
 } from './db'
 
 export function registerIpcHandlers(): void {
@@ -47,6 +49,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('pos:checkout', async (_event, payload) => {
     return processCheckout(payload)
+  })
+
+  ipcMain.handle('sales:get-history', async (_event, input) => {
+    return getSalesHistory(input)
+  })
+
+  ipcMain.handle('sales:get-by-id', async (_event, saleId: string) => {
+    return getSaleById(saleId)
   })
 
   console.log('[IPC] All handlers registered')
