@@ -11,6 +11,10 @@ const api: IpcApi = {
   getDbStats: () => ipcRenderer.invoke('db:get-stats'),
 
   verifyPin: (input) => ipcRenderer.invoke('auth:verify-pin', input),
+
+  searchProducts: (term) => ipcRenderer.invoke('pos:search-products', term),
+
+  getProductByBarcode: (barcode) => ipcRenderer.invoke('pos:get-product-by-barcode', barcode),
 }
 
 contextBridge.exposeInMainWorld('api', api)

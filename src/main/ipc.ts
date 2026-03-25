@@ -1,5 +1,11 @@
 import { ipcMain, app } from 'electron'
-import { getDbHealth, getDbStats, verifyUserPin } from './db'
+import {
+  getDbHealth,
+  getDbStats,
+  verifyUserPin,
+  searchProducts,
+  getProductByBarcode,
+} from './db'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('system:ping', async () => {
@@ -28,6 +34,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('auth:verify-pin', async (_event, input: { pin: string }) => {
     return verifyUserPin(input)
+  })
+
+  ipcMain.handle('pos:search-products', async (_event, term: string) => {
+    return searchProducts(term)
+  })
+
+  ipcMain.handle('pos:get-product-by-barcode', async (_event, barcode: string) => {
+    return getProductByBarcode(barcode)
   })
 
   console.log('[IPC] All handlers registered')

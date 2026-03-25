@@ -4,6 +4,8 @@ export interface IpcApi {
   getDbHealth: () => Promise<DbHealth>
   getDbStats: () => Promise<DbStats>
   verifyPin: (input: VerifyPinInput) => Promise<VerifyPinResult>
+  searchProducts: (term: string) => Promise<PosProduct[]>
+  getProductByBarcode: (barcode: string) => Promise<PosProduct | null>
 }
 
 export interface AppInfo {
@@ -64,6 +66,22 @@ export interface VerifyPinError {
 }
 
 export type VerifyPinResult = VerifyPinSuccess | VerifyPinError
+
+export interface PosProduct {
+  id: string
+  name: string
+  sku: string
+  barcode: string | null
+  price: number
+  availableStock: number
+  requiresPrescription: boolean
+}
+
+export interface CartItem {
+  product: PosProduct
+  quantity: number
+  subtotal: number
+}
 
 export type PageId =
   | 'pos'

@@ -5,7 +5,7 @@ import { join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 import { runMigrations } from './migrate'
 import { runSeedIfNeeded } from './seed'
-import type { VerifyPinInput, VerifyPinResult, UserRole } from '../../shared/types'
+import type { VerifyPinInput, VerifyPinResult, UserRole, PosProduct } from '../../shared/types'
 
 let db: Database.Database | null = null
 
@@ -207,4 +207,66 @@ export function verifyUserPin(input: VerifyPinInput): VerifyPinResult {
       lastLoginAt: now,
     },
   }
+}
+
+interface ProductRow {
+  id: string
+  name: string
+  sku: string
+  barcode: string | null
+  price: number
+  available_stock: number
+  requires_prescription: number
+}
+
+const PRODUCT_QUERY = `
+  SELECT
+    p.id,
+    p.name,
+    p.sku,
+    p.barcode,
+    p.price,
+    COALESCE(vs.total_stock, 0) AS available_stock,
+    p.requires_prescription
+  FROM products p
+  LEFT JOIN v_product_stock vs ON vs.product_id = p.id
+  WHERE p.is_active = 1
+`
+
+function mapProductRow(row: ProductRow): PosProduct {
+  return {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    barcode: row.barcode,
+    price: row.price,
+    availableStock: row.available_stock,
+    requiresPrescription: Boolean(row.requires_prescription),
+  }
+}
+
+export function searchProducts(term: string): PosProduct[] {
+  const database = getDb()
+  const rows = database
+    .prepare(
+      `${PRODUCT_QUERY}
+        AND (
+          p.name LIKE '%' || ? || '%'
+          OR p.sku LIKE '%' || ? || '%'
+          OR p.barcode LIKE '%' || ? || '%'
+        )
+       LIMIT 20`
+    )
+    .all(term, term, term) as ProductRow[]
+
+  return rows.map(mapProductRow)
+}
+
+export function getProductByBarcode(barcode: string): PosProduct | null {
+  const database = getDb()
+  const row = database
+    .prepare(`${PRODUCT_QUERY} AND p.barcode = ?`)
+    .get(barcode) as ProductRow | undefined
+
+  return row ? mapProductRow(row) : null
 }
