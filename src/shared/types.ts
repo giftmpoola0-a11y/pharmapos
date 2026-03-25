@@ -6,6 +6,7 @@ export interface IpcApi {
   verifyPin: (input: VerifyPinInput) => Promise<VerifyPinResult>
   searchProducts: (term: string) => Promise<PosProduct[]>
   getProductByBarcode: (barcode: string) => Promise<PosProduct | null>
+  checkout: (payload: CheckoutPayload) => Promise<CheckoutResult>
 }
 
 export interface AppInfo {
@@ -82,6 +83,42 @@ export interface CartItem {
   quantity: number
   subtotal: number
 }
+
+export type PaymentMethod = 'cash' | 'visa_card' | 'mobile_money'
+
+export interface CheckoutItemInput {
+  productId: string
+  quantity: number
+}
+
+export interface CheckoutPayload {
+  cashierId: string
+  paymentMethod: PaymentMethod
+  items: CheckoutItemInput[]
+  amountTendered?: number | null
+}
+
+export interface CheckoutFailedItem {
+  productId: string
+  name: string
+  requested: number
+  available: number
+}
+
+export interface CheckoutSuccess {
+  success: true
+  saleId: string
+  saleNumber: number
+  changeGiven: number
+}
+
+export interface CheckoutError {
+  success: false
+  error: string
+  failedItems: CheckoutFailedItem[]
+}
+
+export type CheckoutResult = CheckoutSuccess | CheckoutError
 
 export type PageId =
   | 'pos'

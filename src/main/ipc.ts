@@ -5,6 +5,7 @@ import {
   verifyUserPin,
   searchProducts,
   getProductByBarcode,
+  processCheckout,
 } from './db'
 
 export function registerIpcHandlers(): void {
@@ -42,6 +43,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('pos:get-product-by-barcode', async (_event, barcode: string) => {
     return getProductByBarcode(barcode)
+  })
+
+  ipcMain.handle('pos:checkout', async (_event, payload) => {
+    return processCheckout(payload)
   })
 
   console.log('[IPC] All handlers registered')

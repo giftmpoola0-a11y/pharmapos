@@ -125,7 +125,7 @@ export default function App() {
   const renderPage = () => {
     switch (state.currentPage) {
       case 'pos':
-        return <POS />
+        return <POS cashierId={state.currentUser!.id} />
       case 'products':
         return <Products />
       case 'inventory':
@@ -137,7 +137,7 @@ export default function App() {
       case 'settings':
         return <Settings />
       default:
-        return <POS />
+        return <POS cashierId={state.currentUser!.id} />
     }
   }
 

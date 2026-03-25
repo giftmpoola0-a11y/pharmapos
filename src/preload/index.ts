@@ -15,6 +15,8 @@ const api: IpcApi = {
   searchProducts: (term) => ipcRenderer.invoke('pos:search-products', term),
 
   getProductByBarcode: (barcode) => ipcRenderer.invoke('pos:get-product-by-barcode', barcode),
+
+  checkout: (payload) => ipcRenderer.invoke('pos:checkout', payload),
 }
 
 contextBridge.exposeInMainWorld('api', api)

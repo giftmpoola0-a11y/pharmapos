@@ -1,11 +1,20 @@
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
+import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 import { runMigrations } from './migrate'
 import { runSeedIfNeeded } from './seed'
-import type { VerifyPinInput, VerifyPinResult, UserRole, PosProduct } from '../../shared/types'
+import type {
+  VerifyPinInput,
+  VerifyPinResult,
+  UserRole,
+  PosProduct,
+  CheckoutPayload,
+  CheckoutResult,
+  CheckoutFailedItem,
+} from '../../shared/types'
 
 let db: Database.Database | null = null
 
@@ -28,6 +37,45 @@ interface UserRow {
   created_at: string
   last_login_at: string | null
 }
+
+interface ProductRow {
+  id: string
+  name: string
+  sku: string
+  barcode: string | null
+  price: number
+  available_stock: number
+  requires_prescription: number
+}
+
+interface CheckoutProductRow {
+  id: string
+  name: string
+  sku: string
+  price: number
+  available_stock: number
+}
+
+interface BatchRow {
+  id: string
+  quantity: number
+  expiry_date: string
+  received_at: string
+}
+
+const PRODUCT_QUERY = `
+  SELECT
+    p.id,
+    p.name,
+    p.sku,
+    p.barcode,
+    p.price,
+    COALESCE(vs.total_stock, 0) AS available_stock,
+    p.requires_prescription
+  FROM products p
+  LEFT JOIN v_product_stock vs ON vs.product_id = p.id
+  WHERE p.is_active = 1
+`
 
 export function getDbPath(): string {
   const dataDir = app.getPath('userData')
@@ -209,30 +257,6 @@ export function verifyUserPin(input: VerifyPinInput): VerifyPinResult {
   }
 }
 
-interface ProductRow {
-  id: string
-  name: string
-  sku: string
-  barcode: string | null
-  price: number
-  available_stock: number
-  requires_prescription: number
-}
-
-const PRODUCT_QUERY = `
-  SELECT
-    p.id,
-    p.name,
-    p.sku,
-    p.barcode,
-    p.price,
-    COALESCE(vs.total_stock, 0) AS available_stock,
-    p.requires_prescription
-  FROM products p
-  LEFT JOIN v_product_stock vs ON vs.product_id = p.id
-  WHERE p.is_active = 1
-`
-
 function mapProductRow(row: ProductRow): PosProduct {
   return {
     id: row.id,
@@ -247,6 +271,9 @@ function mapProductRow(row: ProductRow): PosProduct {
 
 export function searchProducts(term: string): PosProduct[] {
   const database = getDb()
+  const trimmed = term.trim()
+  if (!trimmed) return []
+
   const rows = database
     .prepare(
       `${PRODUCT_QUERY}
@@ -255,18 +282,288 @@ export function searchProducts(term: string): PosProduct[] {
           OR p.sku LIKE '%' || ? || '%'
           OR p.barcode LIKE '%' || ? || '%'
         )
+       ORDER BY p.name COLLATE NOCASE
        LIMIT 20`
     )
-    .all(term, term, term) as ProductRow[]
+    .all(trimmed, trimmed, trimmed) as ProductRow[]
 
   return rows.map(mapProductRow)
 }
 
 export function getProductByBarcode(barcode: string): PosProduct | null {
   const database = getDb()
+  const trimmed = barcode.trim()
+  if (!trimmed) return null
+
   const row = database
     .prepare(`${PRODUCT_QUERY} AND p.barcode = ?`)
-    .get(barcode) as ProductRow | undefined
+    .get(trimmed) as ProductRow | undefined
 
   return row ? mapProductRow(row) : null
+}
+
+export function processCheckout(payload: CheckoutPayload): CheckoutResult {
+  const database = getDb()
+
+  if (!payload.cashierId) {
+    return {
+      success: false,
+      error: 'Missing cashier ID',
+      failedItems: [],
+    }
+  }
+
+  if (!payload.items.length) {
+    return {
+      success: false,
+      error: 'Cart is empty',
+      failedItems: [],
+    }
+  }
+
+  const tx = database.transaction((input: CheckoutPayload): CheckoutResult => {
+    const failedItems: CheckoutFailedItem[] = []
+
+    const productRows = database.prepare(
+      `
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        COALESCE(vs.total_stock, 0) AS available_stock
+      FROM products p
+      LEFT JOIN v_product_stock vs ON vs.product_id = p.id
+      WHERE p.is_active = 1
+        AND p.id = ?
+      `
+    )
+
+    for (const item of input.items) {
+      const product = productRows.get(item.productId) as CheckoutProductRow | undefined
+
+      if (!product) {
+        failedItems.push({
+          productId: item.productId,
+          name: 'Unknown product',
+          requested: item.quantity,
+          available: 0,
+        })
+        continue
+      }
+
+      if (item.quantity < 1 || product.available_stock < item.quantity) {
+        failedItems.push({
+          productId: product.id,
+          name: product.name,
+          requested: item.quantity,
+          available: product.available_stock,
+        })
+      }
+    }
+
+    if (failedItems.length > 0) {
+      return {
+        success: false,
+        error: 'Some items are no longer available in the requested quantity',
+        failedItems,
+      }
+    }
+
+    const seqRow = database.prepare(`SELECT next_val FROM sale_number_seq LIMIT 1`).get() as {
+      next_val: number
+    }
+
+    const saleNumber = seqRow.next_val
+    const saleId = randomUUID()
+    const now = new Date().toISOString()
+
+    const subtotal = input.items.reduce((sum, item) => {
+      const product = productRows.get(item.productId) as CheckoutProductRow
+      return sum + product.price * item.quantity
+    }, 0)
+
+    const total = subtotal
+
+    let amountTendered: number | null = null
+    let changeGiven = 0
+
+    if (input.paymentMethod === 'cash') {
+      amountTendered = input.amountTendered ?? null
+
+      if (amountTendered === null || !Number.isFinite(amountTendered)) {
+        return {
+          success: false,
+          error: 'Amount received is required for cash payments',
+          failedItems: [],
+        }
+      }
+
+      if (amountTendered < total) {
+        return {
+          success: false,
+          error: 'Amount received is less than the sale total',
+          failedItems: [],
+        }
+      }
+
+      changeGiven = amountTendered - total
+    }
+
+    database
+      .prepare(
+        `
+        INSERT INTO sales (
+          id,
+          sale_number,
+          cashier_id,
+          subtotal,
+          discount_value,
+          discount_amount,
+          total,
+          payment_method,
+          amount_tendered,
+          change_given,
+          status,
+          created_at
+        ) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, 'completed', ?)
+        `
+      )
+      .run(
+        saleId,
+        saleNumber,
+        input.cashierId,
+        subtotal,
+        total,
+        input.paymentMethod,
+        amountTendered,
+        changeGiven,
+        now
+      )
+
+    for (const item of input.items) {
+      const product = productRows.get(item.productId) as CheckoutProductRow
+
+      const batches = database
+        .prepare(
+          `
+          SELECT
+            id,
+            quantity,
+            expiry_date,
+            received_at
+          FROM product_batches
+          WHERE product_id = ?
+            AND is_active = 1
+            AND quantity > 0
+          ORDER BY date(expiry_date) ASC, datetime(received_at) ASC
+          `
+        )
+        .all(item.productId) as BatchRow[]
+
+      let remainingToDeduct = item.quantity
+
+      for (const batch of batches) {
+        if (remainingToDeduct <= 0) break
+
+        const deductQty = Math.min(remainingToDeduct, batch.quantity)
+        const newBatchQty = batch.quantity - deductQty
+
+        database
+          .prepare(
+            `
+            UPDATE product_batches
+            SET quantity = ?
+            WHERE id = ?
+            `
+          )
+          .run(newBatchQty, batch.id)
+
+        database
+          .prepare(
+            `
+            INSERT INTO sale_items (
+              id,
+              sale_id,
+              product_id,
+              batch_id,
+              product_name,
+              product_sku,
+              quantity,
+              unit_price,
+              line_total,
+              created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `
+          )
+          .run(
+            randomUUID(),
+            saleId,
+            product.id,
+            batch.id,
+            product.name,
+            product.sku,
+            deductQty,
+            product.price,
+            deductQty * product.price,
+            now
+          )
+
+        database
+          .prepare(
+            `
+            INSERT INTO stock_movements (
+              id,
+              product_id,
+              batch_id,
+              movement_type,
+              quantity_change,
+              quantity_after,
+              reference_id,
+              reason,
+              performed_by,
+              created_at
+            ) VALUES (?, ?, ?, 'sale', ?, ?, ?, ?, ?, ?)
+            `
+          )
+          .run(
+            randomUUID(),
+            product.id,
+            batch.id,
+            -deductQty,
+            newBatchQty,
+            saleId,
+            `Sale #${saleNumber}`,
+            input.cashierId,
+            now
+          )
+
+        remainingToDeduct -= deductQty
+      }
+
+      if (remainingToDeduct > 0) {
+        throw new Error(`Stock deduction failed for product ${product.id}`)
+      }
+    }
+
+    database.prepare(`UPDATE sale_number_seq SET next_val = next_val + 1`).run()
+
+    return {
+      success: true,
+      saleId,
+      saleNumber,
+      changeGiven,
+    }
+  })
+
+  try {
+    return tx(payload)
+  } catch (error) {
+    console.error('[DB] Checkout failed:', error)
+    return {
+      success: false,
+      error: 'Checkout failed. No changes were saved.',
+      failedItems: [],
+    }
+  }
 }
