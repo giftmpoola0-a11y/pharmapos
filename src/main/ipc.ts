@@ -8,6 +8,7 @@ import {
   processCheckout,
   getSalesHistory,
   getSaleById,
+  getPharmacyInfo,
 } from './db'
 
 export function registerIpcHandlers(): void {
@@ -57,6 +58,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('sales:get-by-id', async (_event, saleId: string) => {
     return getSaleById(saleId)
+  })
+
+  ipcMain.handle('settings:get-pharmacy-info', async () => {
+    return getPharmacyInfo()
   })
 
   console.log('[IPC] All handlers registered')

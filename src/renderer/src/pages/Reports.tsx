@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, ArrowLeft, FileText, Banknote, CreditCard, Smartphone } from 'lucide-react'
-import type { SaleHistoryItem, SaleDetail, PaymentMethod } from '../../../shared/types'
+import {
+  Search,
+  ArrowLeft,
+  FileText,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Receipt,
+} from 'lucide-react'
+import type {
+  SaleHistoryItem,
+  SaleDetail,
+  PaymentMethod,
+  PharmacyInfo,
+} from '../../../shared/types'
 
 const PAYMENT_LABELS: Record<PaymentMethod, { label: string; icon: typeof Banknote }> = {
   cash: { label: 'Cash', icon: Banknote },
@@ -25,6 +38,222 @@ function formatDate(iso: string): string {
   })
 }
 
+function formatReceiptDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-MW', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function ReceiptView({
+  sale,
+  pharmacy,
+  onBack,
+}: {
+  sale: SaleDetail
+  pharmacy: PharmacyInfo
+  onBack: () => void
+}) {
+  const pay = PAYMENT_LABELS[sale.paymentMethod]
+  const showCashFields = sale.paymentMethod === 'cash'
+
+  const divider = (
+    <div
+      style={{
+        borderBottom: '1px dashed var(--text-muted)',
+        opacity: 0.4,
+        margin: '10px 0',
+      }}
+    />
+  )
+
+  return (
+    <div
+      style={{
+        padding: 16,
+        height: '100%',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 12px',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          color: 'var(--text-primary)',
+          cursor: 'pointer',
+          fontSize: 13,
+          alignSelf: 'flex-start',
+          marginBottom: 16,
+        }}
+      >
+        <ArrowLeft size={14} />
+        Back to Sale Details
+      </button>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          paddingTop: 8,
+        }}
+      >
+        <div
+          style={{
+            width: 320,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '24px 20px',
+            fontFamily: "'Courier New', Courier, monospace",
+            fontSize: 12,
+            color: 'var(--text-primary)',
+            lineHeight: 1.6,
+            alignSelf: 'flex-start',
+          }}
+        >
+          <div style={{ textAlign: 'center', marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.04em' }}>
+              {pharmacy.name || 'Pharmacy'}
+            </div>
+            {pharmacy.address && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                {pharmacy.address}
+              </div>
+            )}
+            {pharmacy.phone && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                Tel: {pharmacy.phone}
+              </div>
+            )}
+            {pharmacy.license && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                Lic: {pharmacy.license}
+              </div>
+            )}
+          </div>
+
+          {divider}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Sale #</span>
+            <span style={{ fontWeight: 700 }}>{sale.saleNumber}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Date</span>
+            <span>{formatReceiptDate(sale.createdAt)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Cashier</span>
+            <span>{sale.cashierName}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Payment</span>
+            <span>{pay.label}</span>
+          </div>
+
+          {divider}
+
+          <div style={{ marginBottom: 2 }}>
+            {sale.items.map((item, idx) => (
+              <div key={idx} style={{ marginBottom: 6 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.productName}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    color: 'var(--text-muted)',
+                    fontSize: 11,
+                  }}
+                >
+                  <span>
+                    {item.quantity} x {fmt(item.unitPrice)}
+                  </span>
+                  <span style={{ color: 'var(--text-primary)' }}>{fmt(item.lineTotal)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {divider}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Subtotal</span>
+            <span>{fmt(sale.subtotal)}</span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontWeight: 700,
+              fontSize: 14,
+              marginTop: 4,
+            }}
+          >
+            <span>TOTAL</span>
+            <span>{fmt(sale.totalAmount)}</span>
+          </div>
+
+          {showCashFields && (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginTop: 6,
+                }}
+              >
+                <span>Tendered</span>
+                <span>{fmtNullableMoney(sale.amountTendered)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Change</span>
+                <span>{fmtNullableMoney(sale.changeGiven)}</span>
+              </div>
+            </>
+          )}
+
+          {divider}
+
+          <div
+            style={{
+              textAlign: 'center',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 2,
+            }}
+          >
+            {pharmacy.receiptFooter || 'Thank you for your purchase!'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Reports() {
   const [sales, setSales] = useState<SaleHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,6 +261,8 @@ export function Reports() {
   const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [pharmacyInfo, setPharmacyInfo] = useState<PharmacyInfo | null>(null)
 
   const loadSales = useCallback(async (saleNumber?: number) => {
     setLoading(true)
@@ -60,14 +291,12 @@ export function Reports() {
       void loadSales()
       return
     }
-
     const num = parseInt(trimmed, 10)
     if (isNaN(num)) {
       setError('Enter a valid sale number.')
       setSales([])
       return
     }
-
     void loadSales(num)
   }, [searchInput, loadSales])
 
@@ -93,6 +322,7 @@ export function Reports() {
         return
       }
       setSelectedSale(detail)
+      setShowReceipt(false)
     } catch (err) {
       console.error('[Reports] Failed to load sale detail:', err)
       setError('Failed to load sale details.')
@@ -103,8 +333,27 @@ export function Reports() {
 
   const closeSale = useCallback(() => {
     setSelectedSale(null)
+    setShowReceipt(false)
     setError(null)
   }, [])
+
+  const handleShowReceipt = useCallback(async () => {
+    if (!pharmacyInfo) {
+      try {
+        const info = await window.api.getPharmacyInfo()
+        setPharmacyInfo(info)
+      } catch (err) {
+        console.error('[Reports] Failed to load pharmacy info:', err)
+        setError('Failed to load pharmacy info.')
+        return
+      }
+    }
+    setShowReceipt(true)
+  }, [pharmacyInfo])
+
+  if (selectedSale && showReceipt && pharmacyInfo) {
+    return <ReceiptView sale={selectedSale} pharmacy={pharmacyInfo} onBack={() => setShowReceipt(false)} />
+  }
 
   if (selectedSale) {
     const pay = PAYMENT_LABELS[selectedSale.paymentMethod]
@@ -121,26 +370,72 @@ export function Reports() {
           flexDirection: 'column',
         }}
       >
-        <button
-          onClick={closeSale}
+        <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
-            fontSize: 13,
-            alignSelf: 'flex-start',
+            gap: 8,
             marginBottom: 16,
           }}
         >
-          <ArrowLeft size={14} />
-          Back to Sales
-        </button>
+          <button
+            onClick={closeSale}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            <ArrowLeft size={14} />
+            Back to Sales
+          </button>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            onClick={handleShowReceipt}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: 6,
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            <Receipt size={14} />
+            View Receipt
+          </button>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              padding: '10px 12px',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: 8,
+              color: '#ef4444',
+              fontSize: 13,
+              fontWeight: 500,
+              marginBottom: 12,
+            }}
+          >
+            {error}
+          </div>
+        )}
 
         <div
           style={{
@@ -154,7 +449,13 @@ export function Reports() {
           }}
         >
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
                 Sale #{selectedSale.saleNumber}
               </span>
@@ -238,14 +539,32 @@ export function Reports() {
               <tbody>
                 {selectedSale.items.map((item, idx) => (
                   <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 20px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <td
+                      style={{
+                        padding: '10px 20px',
+                        color: 'var(--text-primary)',
+                        fontWeight: 500,
+                      }}
+                    >
                       {item.productName}
                     </td>
                     <td style={{ padding: '10px 20px', color: 'var(--text-muted)' }}>{item.sku}</td>
-                    <td style={{ padding: '10px 20px', textAlign: 'right', color: 'var(--text-primary)' }}>
+                    <td
+                      style={{
+                        padding: '10px 20px',
+                        textAlign: 'right',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
                       {item.quantity}
                     </td>
-                    <td style={{ padding: '10px 20px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    <td
+                      style={{
+                        padding: '10px 20px',
+                        textAlign: 'right',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
                       {fmt(item.unitPrice)}
                     </td>
                     <td
@@ -310,7 +629,6 @@ export function Reports() {
             }}
           />
         </div>
-
         {searchInput.trim() && (
           <button
             onClick={handleClearSearch}

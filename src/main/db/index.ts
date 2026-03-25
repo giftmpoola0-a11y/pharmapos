@@ -18,6 +18,7 @@ import type {
   SaleHistoryItem,
   SaleDetail,
   SaleLineItem,
+  PharmacyInfo,
 } from '../../shared/types'
 
 let db: Database.Database | null = null
@@ -65,6 +66,11 @@ interface BatchRow {
   quantity: number
   expiry_date: string
   received_at: string
+}
+
+interface SettingRow {
+  key: string
+  value: string
 }
 
 const PRODUCT_QUERY = `
@@ -663,4 +669,36 @@ export function getSaleById(saleId: string): SaleDetail | null {
     .all(saleId) as SaleLineItem[]
 
   return { ...sale, items }
+}
+
+// ─── Pharmacy Info ───
+
+export function getPharmacyInfo(): PharmacyInfo {
+  const database = getDb()
+
+  const rows = database
+    .prepare(
+      `
+      SELECT key, value
+      FROM app_settings
+      WHERE key IN (
+        'pharmacy_name',
+        'pharmacy_address',
+        'pharmacy_phone',
+        'pharmacy_license',
+        'receipt_footer_text'
+      )
+      `
+    )
+    .all() as SettingRow[]
+
+  const map = new Map(rows.map((r) => [r.key, r.value]))
+
+  return {
+    name: map.get('pharmacy_name') ?? '',
+    address: map.get('pharmacy_address') ?? '',
+    phone: map.get('pharmacy_phone') ?? '',
+    license: map.get('pharmacy_license') ?? '',
+    receiptFooter: map.get('receipt_footer_text') ?? '',
+  }
 }

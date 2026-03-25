@@ -21,6 +21,8 @@ const api: IpcApi = {
   getSalesHistory: (input) => ipcRenderer.invoke('sales:get-history', input),
 
   getSaleById: (saleId) => ipcRenderer.invoke('sales:get-by-id', saleId),
+
+  getPharmacyInfo: () => ipcRenderer.invoke('settings:get-pharmacy-info'),
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -37,11 +37,11 @@ VALUES
 
 INSERT INTO app_settings (key, value)
 VALUES
-  ('pharmacy_name', 'Malawi Pharmacy'),
+  ('pharmacy_name', 'Pleasant Pharmacy'),
   ('pharmacy_address', '123 Glyn Jones Road, Blantyre'),
   ('pharmacy_phone', '0999 123 456'),
   ('pharmacy_license', 'PMPB/RET/2024/001'),
-  ('receipt_footer_text', 'Thank you! Get well soon.'),
+  ('receipt_footer_text', 'Thank you! Muchire Msanga akasi.'),
   ('default_low_stock_threshold', '10'),
   ('expiry_alert_days', '90'),
   ('last_sync_at', ''),
